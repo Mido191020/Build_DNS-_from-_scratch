@@ -66,23 +66,18 @@ src/
 
 ## Build
 
-### CMake
-
-```bash
-cmake -S . -B build
-cmake --build build
-```
-
-Targets:
-
-- `dns_query`
-- `dns_proxy`
-
-### GCC (Windows/MSYS2 example)
+### GCC (Windows/MSYS2)
 
 ```bash
 gcc -std=c11 -Wall -Wextra -Wpedantic -Iinclude src/dns_wire.c src/net_platform.c src/dns_query_client.c apps/dns_query_main.c -lws2_32 -o dns_query.exe
 gcc -std=c11 -Wall -Wextra -Wpedantic -Iinclude src/dns_wire.c src/net_platform.c src/dns_proxy_server.c apps/dns_proxy_main.c -lws2_32 -o dns_proxy.exe
+```
+
+### GCC / Clang (Linux/macOS)
+
+```bash
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude src/dns_wire.c src/net_platform.c src/dns_query_client.c apps/dns_query_main.c -o dns_query
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude src/dns_wire.c src/net_platform.c src/dns_proxy_server.c apps/dns_proxy_main.c -o dns_proxy
 ```
 
 ## Run
