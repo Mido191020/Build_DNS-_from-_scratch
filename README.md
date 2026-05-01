@@ -1,133 +1,126 @@
-# dns-proxy-cache
+# DNS Proxy Relay in C
 
-`dns-proxy-cache` is a custom DNS proxy cache written in C with POSIX sockets. It listens locally for DNS queries, forwards cache misses upstream, and returns cached or resolved answers with TTL-aware behavior.
+This repository contains a compact DNS networking project written in C.  
+It currently implements two binaries:
 
-## What this project is about
+- **`dns_query`**: builds a DNS A-record query, sends it over UDP, and parses the IPv4 answer.
+- **`dns_proxy`**: runs a local UDP relay (`127.0.0.1:5353`) and forwards requests to an upstream resolver (`8.8.8.8:53`).
 
-This project is split into three core concerns:
+> Note: the repository name is still `dns-proxy-cache`, but the current implementation is a relay. A true cache layer is planned and documented in the roadmap.
 
-- **`dns_wire.c`**: DNS wire-format encoding and decoding
-- **`dns_cache.c`**: TTL cache management
-- **`proxy.c`**: UDP/TCP proxy flow and event-loop logic
+## Project Objectives
 
-The main idea from the playbook is that DNS is a **message protocol**, not a simple `ask -> get IP` function call. Every request and response is a structured packet with a header, question, and answer sections.
+The project is designed to demonstrate:
 
-## Milestone 1: DNS Wire Engine
+- DNS wire-format handling without external libraries,
+- event-driven UDP socket programming,
+- disciplined memory ownership in C,
+- clean modularization for future protocol and cache extensions.
 
-The first milestone is a standalone DNS wire module that:
-
-1. Builds an A-record query with a 12-byte DNS header plus question section.
-2. Uses the **trampoline pattern**: build on the stack first, then `memcpy()` to a heap buffer returned to the caller.
-3. Sends the packet to `8.8.8.8:53` over UDP.
-4. Waits with `select()` using a 3-second timeout.
-5. Parses the reply, skips header and question, and extracts the first A-record IP with `inet_ntop()`.
-
-### Ownership rule
-
-If a function returns a heap buffer, the caller owns it and must free it on every exit path, including errors and timeouts.
-
-## DNS packet structure
-
-### Header
-
-The DNS header carries the message ID, flags, and counters such as:
-
-- number of questions
-- number of answers
-- number of authority records
-- number of additional records
-
-The ID is critical because it matches a response to the original query.
-
-### Question
-
-The question tells the resolver:
-
-- the domain name
-- the record type
-- the class
-
-Example:
-
-- `example.com`
-- `A`
-- `IN`
-
-### Answer
-
-The answer section contains the resolved data. For an A record, that usually means:
-
-- name
-- type
-- class
-- TTL
-- IPv4 address data
-
-## Wire-format example
-
-DNS names are encoded as length-prefixed labels:
+## Architecture
 
 ```text
-example.com -> 07 example 03 com 00
+apps/
+  dns_query_main.c
+  dns_proxy_main.c
+
+include/
+  dns_wire.h
+  dns_query_client.h
+  dns_proxy_server.h
+  net_platform.h
+
+src/
+  dns_wire.c
+  dns_query_client.c
+  dns_proxy_server.c
+  net_platform.c
 ```
 
-The IP is not returned as text in the packet. It is carried as raw bytes and then formatted into dotted-decimal form by the client.
+### Module responsibilities
 
-## End-to-end flow
+- **`src/dns_wire.c`**: DNS name encoding, query packet construction, and reply parsing.
+- **`src/dns_query_client.c`**: end-to-end client flow (build -> send -> wait -> parse).
+- **`src/dns_proxy_server.c`**: UDP relay loop, pending-query tracking, and timeout eviction.
+- **`src/net_platform.c`**: Winsock/POSIX startup and cleanup abstraction.
 
-1. The client wants the IP for a hostname like `example.com`.
-2. The hostname is encoded into DNS wire format.
-3. A DNS request packet is built.
-4. The packet is sent to an upstream resolver over UDP.
-5. The resolver decodes the request and looks up the record.
-6. The resolver returns a structured response packet.
-7. The client parses the response and extracts the IP.
+## How It Works
 
-## Memory safety rules
+### `dns_query`
 
-- Every `malloc()` must have a matching `free()` on every path.
-- Never read memory after `free()`.
-- Check `realloc()` before overwriting the original pointer.
-- Update linked-list pointers before freeing a node.
-- Run leak checks before moving to the next milestone.
+1. Encodes the hostname into DNS label format.
+2. Builds a DNS query packet (A, IN).
+3. Sends the packet to the configured resolver.
+4. Waits for a reply with `select()`.
+5. Extracts and prints the first IPv4 A-answer.
+
+### `dns_proxy`
+
+1. Receives DNS packets from local clients.
+2. Reads the DNS transaction ID.
+3. Stores pending metadata `(id, client_addr, timestamp)`.
+4. Forwards packet to upstream resolver.
+5. Receives upstream reply and matches by ID.
+6. Sends reply back to the original client.
+7. Evicts stale pending entries on timeout.
 
 ## Build
 
-### Example build commands
+### CMake
 
 ```bash
-gcc -o dns-proxy-cache main.c dns_wire.c dns_cache.c proxy.c
-./dns-proxy-cache
+cmake -S . -B build
+cmake --build build
 ```
 
-Or with `make`:
+Targets:
+
+- `dns_query`
+- `dns_proxy`
+
+### GCC (Windows/MSYS2 example)
 
 ```bash
-make
-./dns-proxy-cache
+gcc -std=c11 -Wall -Wextra -Wpedantic -Iinclude src/dns_wire.c src/net_platform.c src/dns_query_client.c apps/dns_query_main.c -lws2_32 -o dns_query.exe
+gcc -std=c11 -Wall -Wextra -Wpedantic -Iinclude src/dns_wire.c src/net_platform.c src/dns_proxy_server.c apps/dns_proxy_main.c -lws2_32 -o dns_proxy.exe
 ```
 
-## Debugging tools
+## Run
 
-- `dig` for query testing
-- `valgrind` for leak and invalid access checks
-- `tcpdump` for packet inspection
+```bash
+./dns_query
+./dns_proxy
+```
 
-## Planned milestones
+Windows:
 
-1. **Milestone 1** — DNS wire engine
-2. **Milestone 2** — UDP relay loop
-3. **Milestone 3** — TTL cache
-4. **Milestone 4** — TCP fallback with buffering
-5. **Milestone 5** — polish, stats, and leak-free cleanup
+```bash
+dns_query.exe
+dns_proxy.exe
+```
 
-## Project files
+### Proxy test example
 
-- `dns_wire.c` — DNS packet encoding/decoding
-- `dns_cache.c` — cache storage and eviction
-- `proxy.c` — networking and request dispatch
-- `main.c` — entry point used for testing
+```bash
+dig @127.0.0.1 -p 5353 example.com
+```
 
-## Notes
+## Current Scope and Limitations
 
-The playbook’s core message is simple: understand the packet, own the memory, and keep the network flow separated from wire-format logic.
+- UDP only (no TCP fallback for truncated responses).
+- No TTL cache implemented yet.
+- Reply matching is transaction-ID based.
+- Parser currently focuses on extracting the first IPv4 A-record.
+- No metrics endpoint or structured telemetry.
+
+## Roadmap
+
+1. Add TTL-aware cache storage and lookup.
+2. Add TCP handling for large/truncated DNS replies.
+3. Strengthen request/reply correlation beyond transaction ID.
+4. Expand parser support (AAAA, CNAME, additional records).
+5. Add structured logging and runtime stats.
+
+## Why This Project Matters
+
+This codebase is a practical systems-programming exercise in protocol-level networking. It favors explicit control flow, small focused modules, and implementation clarity over framework abstraction.
