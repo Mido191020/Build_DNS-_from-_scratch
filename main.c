@@ -102,12 +102,9 @@ int main(void) {
 
     // ===== PARSE =====
     char resolved_ip[16];
-
     if (parse_dns_reply(reply_buffer, reply_len,
                         resolved_ip, sizeof(resolved_ip)) == 0) {
-
         printf(">>> Resolved IP: %s <<<\n", resolved_ip);
-
     } else {
         printf("Failed to parse A record\n");
     }
