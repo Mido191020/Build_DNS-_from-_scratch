@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 
 #if defined(_WIN32)
@@ -11,10 +12,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <sys/select.h>
 #define CLOSESOCKET(s) close(s)
 #define SOCKET int
-#define INVALID_SOCKET -1
 #endif
 
 #include "dns_wire.h"
@@ -28,93 +27,103 @@ int main(void) {
     }
 #endif
 
-    const char *target_domain = "example.com";
+    const char *domain = "example.com";
 
-    // ===== BUILD QUERY =====
-    size_t query_len = 0;
-    char *query_buf = build_dns_query(target_domain, &query_len);
-    if (!query_buf) return 1;
-
-    // ===== SOCKET =====
-    SOCKET sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd == INVALID_SOCKET) {
-        free(query_buf);
+    size_t query_len;
+    char *dns_query = build_dns_query(domain, &query_len);
+    if (!dns_query) {
+        perror("build_dns_query");
         return 1;
     }
 
-    struct sockaddr_in dest;
-    memset(&dest, 0, sizeof(dest));
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(53);
-    inet_pton(AF_INET, "8.8.8.8", &dest.sin_addr);
+    uint16_t sent_id = (uint16_t)(((unsigned char)dns_query[0] << 8) |
+                                  (unsigned char)dns_query[1]);
 
-    // ===== SEND =====
-    int bytes_sent = sendto(sockfd, query_buf, query_len, 0,
-                            (struct sockaddr *)&dest, sizeof(dest));
-
-    if (bytes_sent < 0) {
-        free(query_buf);
-        CLOSESOCKET(sockfd);
+    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock == INVALID_SOCKET) {
+        perror("socket");
+        free(dns_query);
         return 1;
     }
 
-    // IMPORTANT: free immediately after send (per mentor rule)
-    free(query_buf);
-    query_buf = NULL;
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(53);
 
-    // ===== TIMEOUT (select) =====
+    if (inet_pton(AF_INET, "8.8.8.8", &addr.sin_addr) <= 0) {
+        perror("inet_pton");
+        free(dns_query);
+        CLOSESOCKET(sock);
+        return 1;
+    }
+
+    if (query_len > INT_MAX) {
+        fprintf(stderr, "DNS query too large\n");
+        free(dns_query);
+        CLOSESOCKET(sock);
+        return 1;
+    }
+
+    if (sendto(sock, dns_query, (int)query_len, 0,
+               (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        perror("sendto");
+        free(dns_query);
+        CLOSESOCKET(sock);
+        return 1;
+    }
+
+    free(dns_query);
+
     fd_set rfds;
     FD_ZERO(&rfds);
-    FD_SET(sockfd, &rfds);
+    FD_SET(sock, &rfds);
 
     struct timeval tv;
     tv.tv_sec = 3;
     tv.tv_usec = 0;
 
-    int sel = select(sockfd + 1, &rfds, NULL, NULL, &tv);
+#if defined(_WIN32)
+    int sel = select(0, &rfds, NULL, NULL, &tv);
+#else
+    int sel = select((int)sock + 1, &rfds, NULL, NULL, &tv);
+#endif
 
     if (sel == 0) {
-        printf("Timeout waiting for DNS response\n");
-        CLOSESOCKET(sockfd);
+        printf("Timeout\n");
+        CLOSESOCKET(sock);
         return 1;
     }
 
     if (sel < 0) {
-        CLOSESOCKET(sockfd);
+        perror("select");
+        CLOSESOCKET(sock);
         return 1;
     }
 
-    // ===== RECEIVE =====
-    char reply_buffer[1024];
-    memset(reply_buffer, 0, sizeof(reply_buffer));
+    char buffer[1024];
+    struct sockaddr_in src;
+    socklen_t srclen = sizeof(src);
 
-    struct sockaddr_in src_addr;
-    memset(&src_addr, 0, sizeof(src_addr));
-    socklen_t src_len = sizeof(src_addr);
+    int n = recvfrom(sock, buffer, (int)sizeof(buffer), 0,
+                      (struct sockaddr *)&src, &srclen);
 
-    int reply_len = recvfrom(sockfd, reply_buffer, sizeof(reply_buffer), 0,
-                             (struct sockaddr *)&src_addr, &src_len);
-
-    if (reply_len < 0) {
-        CLOSESOCKET(sockfd);
+    if (n < 0) {
+        perror("recvfrom");
+        CLOSESOCKET(sock);
         return 1;
     }
 
-    // ===== PARSE =====
-    char resolved_ip[16];
-    if (parse_dns_reply(reply_buffer, reply_len,
-                        resolved_ip, sizeof(resolved_ip)) == 0) {
-        printf(">>> Resolved IP: %s <<<\n", resolved_ip);
-    } else {
-        printf("Failed to parse A record\n");
+    char ip[16];
+
+    if (!pars_reply((const unsigned char *)buffer, (size_t)n, sent_id, ip, sizeof(ip))) {
+        printf("Failed to parse DNS response\n");
+        CLOSESOCKET(sock);
+        return 1;
     }
 
-    // ===== CLEANUP =====
-    CLOSESOCKET(sockfd);
+    printf("Resolved IP: %s\n", ip);
 
-#if defined(_WIN32)
-    WSACleanup();
-#endif
-
+    CLOSESOCKET(sock);
     return 0;
 }

@@ -1,6 +1,6 @@
-# dns-proxy-cache
+# build DNS
 
-`dns-proxy-cache` is a custom DNS proxy cache written in C with POSIX sockets. It listens locally for DNS queries, forwards cache misses upstream, and returns cached or resolved answers with TTL-aware behavior.
+`build DNS` is a custom DNS proxy cache written in C with POSIX sockets. It listens locally for DNS queries on `127.0.0.1:5300`, forwards cache misses upstream, and returns cached or resolved answers with TTL-aware behavior.
 
 ## What this project is about
 

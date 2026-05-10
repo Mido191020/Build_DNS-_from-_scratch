@@ -2,132 +2,132 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
-int encode_dns_name(const char *domain, unsigned char *out_buffer) {
-    if (domain == NULL || out_buffer == NULL) {
-        return -1;
-    }
+static int encode_dns_name(const char *host, unsigned char *out) {
+    const char *pos = host;
+    const char *label = host;
+    unsigned char *dst = out;
 
-    const char *in_ptr = domain;
-    unsigned char *out_ptr = out_buffer;
-    unsigned char *start = out_buffer;
+    while (*pos) {
+        if (*pos == '.') {
+            size_t l = (size_t)(pos - label);
+            if (l == 0 || l > 63) return -1;
 
-    uint8_t len = 0;
-    unsigned char *len_ptr = out_ptr++;
+            *dst++ = (unsigned char)l;
+            memcpy(dst, label, l);
+            dst += l;
 
-    while (*in_ptr != '\0') {
-        if (*in_ptr == '.') {
-            if (len == 0 || len > 63) return -1;
-            *len_ptr = len;
-            len = 0;
-            len_ptr = out_ptr++;
-        } else {
-            if (len >= 63) return -1;
-            *out_ptr++ = (unsigned char)*in_ptr;
-            len++;
+            label = pos + 1;
         }
-
-        in_ptr++;
+        pos++;
     }
 
-    if (len == 0 || len > 63) return -1;
+    size_t l = (size_t)(pos - label);
+    if (l == 0 || l > 63) return -1;
 
-    *len_ptr = len;
-    *out_ptr++ = 0x00;
+    *dst++ = (unsigned char)l;
+    memcpy(dst, label, l);
+    dst += l;
 
-    return (int)(out_ptr - start);
+    *dst++ = 0x00;
+
+    return (int)(dst - out);
 }
 
 char *build_dns_query(const char *hostname, size_t *out_len) {
-    if (!hostname || !out_len) return NULL;
-
-    char *buffer = malloc(512);
+    unsigned char *buffer = malloc(512);
     if (!buffer) return NULL;
 
-    char *write_ptr = buffer;
+    unsigned char *p = buffer;
 
-    *write_ptr++ = 0xAA;
-    *write_ptr++ = 0xAA;
-    *write_ptr++ = 0x01;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x01;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x00;
+    uint16_t id = 0xAAAA;
 
-    int name_len = encode_dns_name(hostname, (unsigned char *)write_ptr);
+    *p++ = (unsigned char)(id >> 8);
+    *p++ = (unsigned char)(id & 0xFF);
+
+    *p++ = 0x01;
+    *p++ = 0x00;
+
+    *p++ = 0x00; *p++ = 0x01;
+    *p++ = 0x00; *p++ = 0x00;
+    *p++ = 0x00; *p++ = 0x00;
+    *p++ = 0x00; *p++ = 0x00;
+
+    int name_len = encode_dns_name(hostname, p);
     if (name_len < 0) {
         free(buffer);
         return NULL;
     }
 
-    write_ptr += name_len;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x01;
-    *write_ptr++ = 0x00;
-    *write_ptr++ = 0x01;
+    p += name_len;
 
-    *out_len = (size_t)(write_ptr - buffer);
-    return buffer;
+    *p++ = 0x00; *p++ = 0x01;
+    *p++ = 0x00; *p++ = 0x01;
+
+    *out_len = (size_t)(p - buffer);
+    return (char *)buffer;
 }
 
-int parse_dns_reply(const char *buf, size_t len, char *out_ip, size_t ip_len) {
-    if (!buf || !out_ip || ip_len < 16) return -1;
+int is_dns_reply_valid(const unsigned char *buffer, size_t buffer_len, uint16_t sent_id) {
+    if (buffer_len < 12) return 0;
+
+    if (!(buffer[2] & 0x80)) return 0;
+
+    uint16_t recv_id = (buffer[0] << 8) | buffer[1];
+    if (recv_id != sent_id) return 0;
+
+    if ((buffer[3] & 0x0F) != 0) return 0;
+
+    uint16_t ancount = (buffer[6] << 8) | buffer[7];
+    if (ancount == 0) return 0;
+
+    return 1;
+}
+
+char *pars_reply(
+        const unsigned char *buffer,
+        size_t buffer_len,
+        uint16_t sent_id,
+        char *out_buffer,
+        size_t out_len
+) {
+    if (!is_dns_reply_valid(buffer, buffer_len, sent_id)) {
+        return NULL;
+    }
 
     size_t offset = 12;
 
-    while (offset < len) {
-        unsigned char byte = buf[offset];
-        if ((byte & 0xC0) == 0xC0) {
-            if (offset + 1 >= len) return -1;
-            offset += 2;
-            break;
-        }
+    while (offset < buffer_len && buffer[offset] != 0) {
+        unsigned char len = buffer[offset];
 
-        if (byte == 0) {
-            offset += 1;
-            break;
-        }
+        if ((len & 0xC0) == 0xC0) return NULL;
 
-        offset += (byte + 1);
-        if (offset > len) return -1;
+        if (offset + len + 1 >= buffer_len) return NULL;
+
+        offset += len + 1;
     }
 
-    if (offset + 4 > len) return -1;
-    offset += 4;
+    if (offset + 5 >= buffer_len) return NULL;
 
-    if (offset + 2 > len) return -1;
+    offset += 5;
+
+    if (offset + 12 > buffer_len) return NULL;
+
+    offset += 10;
+
+    uint16_t rdlength = (buffer[offset] << 8) | buffer[offset + 1];
+
+    if (rdlength != 4) return NULL;
+
     offset += 2;
 
-    unsigned short type =
-            ((unsigned char)buf[offset] << 8) |
-            (unsigned char)buf[offset + 1];
-    offset += 2;
+    if (offset + 4 > buffer_len) return NULL;
 
-    offset += 2;
-    offset += 4;
+    snprintf(out_buffer, out_len, "%u.%u.%u.%u",
+             buffer[offset],
+             buffer[offset + 1],
+             buffer[offset + 2],
+             buffer[offset + 3]);
 
-    unsigned short rdlength =
-            ((unsigned char)buf[offset] << 8) |
-            (unsigned char)buf[offset + 1];
-    offset += 2;
-
-    if (offset + rdlength > len) return -1;
-
-    if (type == 1 && rdlength == 4) {
-        unsigned char ip1 = buf[offset];
-        unsigned char ip2 = buf[offset + 1];
-        unsigned char ip3 = buf[offset + 2];
-        unsigned char ip4 = buf[offset + 3];
-
-        snprintf(out_ip, ip_len, "%u.%u.%u.%u", ip1, ip2, ip3, ip4);
-        return 0;
-    }
-
-    return -1;
+    return out_buffer;
 }
