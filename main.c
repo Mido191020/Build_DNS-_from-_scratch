@@ -12,8 +12,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/select.h>
+#include <sys/time.h>
 #define CLOSESOCKET(s) close(s)
 #define SOCKET int
+#define INVALID_SOCKET -1
 #endif
 
 #include "dns_wire.h"
