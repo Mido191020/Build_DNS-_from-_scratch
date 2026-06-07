@@ -2,7 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <ws2tcpip.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h> // Provides close()
 
 typedef struct Node {
     uint16_t ID;
@@ -16,8 +19,8 @@ typedef struct Node {
 request_node *Head = NULL;
 
 int add(uint16_t id, struct sockaddr_in *client_data, socklen_t addr_len, char *buffer, size_t request_size) {
-    if (client_data == NULL || buffer == NULL || request_size == 0) {
-        fprintf(stderr, "empty data\n");
+    if (client_data == NULL || buffer == NULL || buffer[0] == '\0') {
+        perror("empty data");
         return -1;
     }
 
@@ -73,14 +76,7 @@ void delete(uint16_t ID) {
     free(temp);
 }
 
-int main(void) {
-#if defined(_WIN32)
-    WSADATA d;
-    if (WSAStartup(MAKEWORD(2, 2), &d) != 0) {
-        perror("WSAStartup");
-        return 1;
-    }
-#endif
+int main() {
     int local_socket;
     local_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (local_socket < 0) {
@@ -91,17 +87,17 @@ int main(void) {
     struct sockaddr_in local_address;
     memset(&local_address, 0, sizeof(local_address));
     local_address.sin_family = AF_INET;
-    local_address.sin_port = htons(5353);
+    local_address.sin_port = htons(5353); // Linux safely allows binding to 5353 without mDNS conflicts
     char *ip_string = "127.0.0.1";
     if (!inet_pton(AF_INET, ip_string, &(local_address.sin_addr))) {
         perror("invalid IP");
-        closesocket(local_socket);
+        结构close(local_socket);
         return 1;
     }
 
     if (bind(local_socket, (struct sockaddr *)&local_address, sizeof(local_address)) < 0) {
         perror("bind fail");
-        closesocket(local_socket);
+        close(local_socket);
         return 1;
     }
 
@@ -109,7 +105,7 @@ int main(void) {
     upstream_sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (upstream_sock < 0) {
         perror("failed to create upstream socket");
-        closesocket(local_socket);
+        close(local_socket);
         return 1;
     }
 
@@ -120,8 +116,8 @@ int main(void) {
     char *google_IP = "8.8.8.8";
     if (!inet_pton(AF_INET, google_IP, &upstream_server_address.sin_addr)) {
         perror("Invalid IP");
-        closesocket(local_socket);
-        closesocket(upstream_sock);
+        close(local_socket);
+        close(upstream_sock);
         return 1;
     }
 
@@ -158,37 +154,13 @@ int main(void) {
         struct sockaddr_in google_addr;
         socklen_t google_addr_len = sizeof(google_addr);
 
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(upstream_sock, &rfds);
-
-        struct timeval tv;
-        tv.tv_sec = 3;
-        tv.tv_usec = 0;
-
-#if defined(_WIN32)
-        int sel = select(0, &rfds, NULL, NULL, &tv);
-#else
-        int sel = select(upstream_sock + 1, &rfds, NULL, NULL, &tv);
-#endif
-        if (sel <= 0) {
-            if (sel < 0) {
-                perror("select(upstream_sock)");
-            } else {
-                fprintf(stderr, "upstream timeout\n");
-            }
-            delete(recv_id);
-            continue;
-        }
-
         int receved_goole_reponse = recvfrom(upstream_sock, response_buffer, sizeof(response_buffer), 0, (struct sockaddr *)&google_addr, &google_addr_len);
         if (receved_goole_reponse < 0) {
             perror("failed to receive google response");
-            delete(recv_id);
             continue;
         }
 
-        if (google_addr.sin_addr.s_addr != upstream_server_address.sin_addr.s_addr ||
+        if (google_addr.sin_addr.s_addr != upstream_server_address.sin_addr.s_addr || 
             google_addr.sin_port != upstream_server_address.sin_port) {
             perror("Dropped packet from untrusted source");
             continue;
@@ -214,7 +186,7 @@ int main(void) {
         delete(google_response_ID);
     }
 
-    closesocket(local_socket);
-    closesocket(upstream_sock);
+    close(local_socket);
+    close(upstream_sock);
     return 0;
 }
