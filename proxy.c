@@ -16,8 +16,8 @@ typedef struct Node {
 request_node *Head = NULL;
 
 int add(uint16_t id, struct sockaddr_in *client_data, socklen_t addr_len, char *buffer, size_t request_size) {
-    if (client_data == NULL || buffer == NULL || buffer[0] == '\0') {
-        perror("empty data");
+    if (client_data == NULL || buffer == NULL || request_size == 0) {
+        fprintf(stderr, "empty data\n");
         return -1;
     }
 
