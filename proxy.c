@@ -73,7 +73,14 @@ void delete(uint16_t ID) {
     free(temp);
 }
 
-int main() {
+int main(void) {
+#if defined(_WIN32)
+    WSADATA d;
+    if (WSAStartup(MAKEWORD(2, 2), &d) != 0) {
+        perror("WSAStartup");
+        return 1;
+    }
+#endif
     int local_socket;
     local_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (local_socket < 0) {
