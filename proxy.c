@@ -158,9 +158,33 @@ int main(void) {
         struct sockaddr_in google_addr;
         socklen_t google_addr_len = sizeof(google_addr);
 
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(upstream_sock, &rfds);
+
+        struct timeval tv;
+        tv.tv_sec = 3;
+        tv.tv_usec = 0;
+
+#if defined(_WIN32)
+        int sel = select(0, &rfds, NULL, NULL, &tv);
+#else
+        int sel = select(upstream_sock + 1, &rfds, NULL, NULL, &tv);
+#endif
+        if (sel <= 0) {
+            if (sel < 0) {
+                perror("select(upstream_sock)");
+            } else {
+                fprintf(stderr, "upstream timeout\n");
+            }
+            delete(recv_id);
+            continue;
+        }
+
         int receved_goole_reponse = recvfrom(upstream_sock, response_buffer, sizeof(response_buffer), 0, (struct sockaddr *)&google_addr, &google_addr_len);
         if (receved_goole_reponse < 0) {
             perror("failed to receive google response");
+            delete(recv_id);
             continue;
         }
 
