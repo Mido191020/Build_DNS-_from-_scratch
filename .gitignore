@@ -1,0 +1,29 @@
+# Compiled binaries
+dns_proxy
+dns_proxy.exe
+dns_query
+dns_query.exe
+
+# Build directories
+cmake-build-debug/
+cmake-build-release/
+build/
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+dns_proxy.log
+
+# Archives and temporary files
+dns-mentor-session.zip
+dns-mentor-session/
+

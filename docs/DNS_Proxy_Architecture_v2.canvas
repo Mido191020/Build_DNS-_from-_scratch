@@ -1,0 +1,156 @@
+{
+  "nodes": [
+    {
+      "id": "group00000000001",
+      "type": "group",
+      "x": -50,
+      "y": -50,
+      "width": 480,
+      "height": 700,
+      "label": "Zone 1: epoll Event Multiplexing",
+      "color": "5"
+    },
+    {
+      "id": "group00000000002",
+      "type": "group",
+      "x": 550,
+      "y": -50,
+      "width": 500,
+      "height": 700,
+      "label": "Zone 2: Stateless UDP State Machine",
+      "color": "6"
+    },
+    {
+      "id": "group00000000003",
+      "type": "group",
+      "x": 1170,
+      "y": -50,
+      "width": 520,
+      "height": 700,
+      "label": "Zone 3: Upstream Resolution & Cleanup",
+      "color": "4"
+    },
+    {
+      "id": "6f0ad84f44ce9c17",
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 220,
+      "text": "# Step 1: epoll_wait Wakes Up\n\nThe kernel signals an event on our epoll file descriptor.\n* `epoll_wait(epoll_fd, events, MAX_EVENTS, -1)` returns `n_fds > 0`\n* We iterate through `events[i]` from `0` to `n_fds - 1`\n\n**Key Decision:** Which UDP socket triggered the event?",
+      "color": "5"
+    },
+    {
+      "id": "a3b2c1d0e9f8a7b6",
+      "type": "text",
+      "x": 0,
+      "y": 320,
+      "width": 380,
+      "height": 260,
+      "text": "# Step 2: Socket Multiplexing\n\nDistinguish client queries from upstream replies:\n\n```c\nif (events[i].data.fd == proxy_fd) {\n    // Case A: Client Query on Port 5353\n} else if (events[i].data.fd == dns_server_fd) {\n    // Case B: Upstream Reply from Google\n}\n```\n* **`proxy_fd`**: Bound to `127.0.0.1:5353`\n* **`dns_server_fd`**: Bound to `0.0.0.0:0` (Ephemeral)",
+      "color": "6"
+    },
+    {
+      "id": "1122334455667788",
+      "type": "text",
+      "x": 600,
+      "y": 0,
+      "width": 400,
+      "height": 260,
+      "text": "# Step 3: Receive Client Query\n\nRead datagram via `recvfrom(proxy_fd)` and capture client address:\n\n```c\nstruct sockaddr_in client_addr;\nsocklen_t addr_len = sizeof(client_addr);\nssize_t bytes = recvfrom(proxy_fd, buffer, sizeof(buffer), 0,\n                         (struct sockaddr*)&client_addr, &addr_len);\n```\n\n**Critical Action:** We MUST save `client_addr` (IP + ephemeral port) to reply later!",
+      "color": "4"
+    },
+    {
+      "id": "8877665544332211",
+      "type": "text",
+      "x": 600,
+      "y": 320,
+      "width": 400,
+      "height": 280,
+      "text": "# Step 4: Stateless UDP Dilemma\n\n**Why can we not forward immediately without saving state?**\n\n* UDP has **no kernel connection stream**.\n* Outgoing packets to Google leave via `dns_server_fd` using our proxy IP and ephemeral port.\n* When Google replies to `dns_server_fd`, the OS kernel has **no memory** of which client asked!\n* Without saving Application State, Google replies cannot be routed back to the client.",
+      "color": "1"
+    },
+    {
+      "id": "aabbccddeeff0011",
+      "type": "text",
+      "x": 1220,
+      "y": 0,
+      "width": 420,
+      "height": 300,
+      "text": "# Step 5: Allocate State Mapping\n\nCreate a `request_node` struct and push to linked list head:\n\n```c\nstruct request_node *req = malloc(sizeof(struct request_node));\nreq->tx_id = ntohs(*(uint16_t*)buffer); // 16-bit DNS ID\nreq->client_addr = client_addr;         // Client IP:Port\nreq->timestamp = time(NULL);            // For timeout cleanup\nreq->next = request_list_head;\nrequest_list_head = req;\n```",
+      "color": "3"
+    },
+    {
+      "id": "0011223344556677",
+      "type": "text",
+      "x": 1220,
+      "y": 340,
+      "width": 420,
+      "height": 280,
+      "text": "# Step 6: Forward & Resolve Reply\n\n1. **Forward Query:** `sendto(dns_server_fd, buffer, ...)` to `8.8.8.8:53`.\n2. **Google Replies:** `epoll_wait` wakes up on `dns_server_fd`.\n3. **Lookup State:** Extract reply ID and walk `request_list_head` where `node->tx_id == reply_id`.\n4. **Route to Client:** `sendto(proxy_fd, resp_buf, ..., &node->client_addr)`.\n5. **Cleanup Memory:** `free(node)` and unlink from list!",
+      "color": "5"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ed00000000000001",
+      "fromNode": "6f0ad84f44ce9c17",
+      "fromSide": "bottom",
+      "toNode": "a3b2c1d0e9f8a7b6",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Inspect event fd",
+      "color": "5"
+    },
+    {
+      "id": "ed00000000000002",
+      "fromNode": "a3b2c1d0e9f8a7b6",
+      "fromSide": "right",
+      "toNode": "1122334455667788",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "fd == proxy_fd",
+      "color": "4"
+    },
+    {
+      "id": "ed00000000000003",
+      "fromNode": "1122334455667788",
+      "fromSide": "bottom",
+      "toNode": "8877665544332211",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Why save state?",
+      "color": "1"
+    },
+    {
+      "id": "ed00000000000004",
+      "fromNode": "8877665544332211",
+      "fromSide": "right",
+      "toNode": "aabbccddeeff0011",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "Mandatory State Allocation",
+      "color": "3"
+    },
+    {
+      "id": "ed00000000000005",
+      "fromNode": "aabbccddeeff0011",
+      "fromSide": "bottom",
+      "toNode": "0011223344556677",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "State saved! Forward upstream",
+      "color": "4"
+    },
+    {
+      "id": "ed00000000000006",
+      "fromNode": "a3b2c1d0e9f8a7b6",
+      "fromSide": "bottom",
+      "toNode": "0011223344556677",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "fd == dns_server_fd (Reply)",
+      "color": "5"
+    }
+  ]
+}

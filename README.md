@@ -1,133 +1,120 @@
-# build DNS
+# dns-proxy-cache
 
-`build DNS` is a custom DNS proxy cache written in C with POSIX sockets. It listens locally for DNS queries on `127.0.0.1:5300`, forwards cache misses upstream, and returns cached or resolved answers with TTL-aware behavior.
+[![Language](https://img.shields.io/badge/language-C11-blue.svg)](https://en.wikipedia.org/wiki/C11_(C_standard_revision))
+[![Build](https://img.shields.io/badge/build-CMake-green.svg)](https://cmake.org/)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey.svg)](#)
 
-## What this project is about
+A high-performance, lightweight DNS resolver client and concurrent, non-blocking UDP proxy server built from scratch in C11 using POSIX sockets and `epoll`.
 
-This project is split into three core concerns:
+---
 
-- **`dns_wire.c`**: DNS wire-format encoding and decoding
-- **`dns_cache.c`**: TTL cache management
-- **`proxy.c`**: UDP/TCP proxy flow and event-loop logic
+## Why this project?
+When developing network infrastructure, treating protocols as simple function calls is a common pitfall. DNS is a raw **packet-oriented message protocol** where every request and response is a structured byte stream containing headers, queries, and variable-length resource records. This project demonstrates how to build cross-platform DNS wire format encoders, parse complex network responses, and multiplex concurrent traffic using low-level OS primitives.
 
-The main idea from the playbook is that DNS is a **message protocol**, not a simple `ask -> get IP` function call. Every request and response is a structured packet with a header, question, and answer sections.
+---
 
-## Milestone 1: DNS Wire Engine
+## Features
+- **Raw Wire Engine (`dns_wire.c`):** Manual bitwise serialization and deserialization of DNS standard queries and responses (RFC 1035).
+- **A-Record Resolution:** Encodes dotted-decimal hostnames (e.g., `example.com`) to length-prefixed DNS labels and extracts IPv4 addresses from A-record answer payloads.
+- **Concurrent epoll Proxy (`proxy.c`):** An asynchronous UDP proxy listening on port `5353` that handles concurrent client requests using Linux `epoll` edge/level-triggered multiplexing.
+- **State Tracking & Routing:** Singly linked request tracker mapped by 16-bit Transaction IDs to correctly route async upstream responses back to originating clients.
+- **Origin Verification:** Validation of source IP and port for all packets received from upstream resolvers to guard against packet spoofing.
+- **Cross-Platform Compatibility:** Single-shot query resolution works natively on Linux and Windows (using WSAStartup initialization helpers).
 
-The first milestone is a standalone DNS wire module that:
+---
 
-1. Builds an A-record query with a 12-byte DNS header plus question section.
-2. Uses the **trampoline pattern**: build on the stack first, then `memcpy()` to a heap buffer returned to the caller.
-3. Sends the packet to `8.8.8.8:53` over UDP.
-4. Waits with `select()` using a 3-second timeout.
-5. Parses the reply, skips header and question, and extracts the first A-record IP with `inet_ntop()`.
+## Quickstart (Get Running in 2 Minutes)
 
-### Ownership rule
+### 1. Build the Code
+#### Option A: Command Line
+Ensure you have CMake and a C compiler installed, then run:
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
 
-If a function returns a heap buffer, the caller owns it and must free it on every exit path, including errors and timeouts.
+#### Option B: CLion / IDE
+Simply open this directory as a project in CLion. The IDE will automatically configure CMake using the `CMakeLists.txt` file and allow you to build and run `dns_query` and `dns_proxy` targets directly.
 
-## DNS packet structure
 
-### Header
+### 2. Start the DNS Proxy (Linux / WSL)
+Start the proxy to listen locally on port `5353` and forward queries to Google DNS (`8.8.8.8`):
+```bash
+./build/dns_proxy
+```
 
-The DNS header carries the message ID, flags, and counters such as:
+### 3. Send a DNS Query
+In another terminal, send a query through the proxy using `dig`:
+```bash
+dig @127.0.0.1 -p 5353 google.com A
+```
+Alternatively, run the included Python test client:
+```bash
+python dns_test.py
+```
 
-- number of questions
-- number of answers
-- number of authority records
-- number of additional records
+---
 
-The ID is critical because it matches a response to the original query.
+## Configuration
+All configuration parameters are currently hardcoded in source files for speed and simplicity. 
 
-### Question
+- **Proxy Bind Port:** `127.0.0.1:5353` (defined in `proxy.c`)
+- **Upstream DNS Resolver:** `8.8.8.8:53` (defined in `proxy.c`)
+- **Default Resolution Target:** `example.com` (defined in `main.c` for `dns_query`)
 
-The question tells the resolver:
+For instructions on how to modify these values or compile with specific warning levels, see [docs/TECHNICAL.md](file:///D:/clion/dns-proxy-cache/docs/TECHNICAL.md#L45-L65).
 
-- the domain name
-- the record type
-- the class
+---
 
-Example:
+## Usage Examples
 
-- `example.com`
-- `A`
-- `IN`
+### Executing the Resolver (`dns_query`)
+To query `example.com` directly using the single-shot client:
+```bash
+$ ./build/dns_query
+Resolved IP: 93.184.215.14
+```
 
-### Answer
+### Testing the Proxy with `dns_test.py`
+```bash
+$ python dns_test.py
+Sending DNS query to ('127.0.0.1', 5353)...
+Received response from ('127.0.0.1', 5353): 12348180000100010000000006676f6f676c6503636f6d0000010001c00c00010001000000780004ad251a2e
+Response Transaction ID: 1234
+Resolved IP from response: 173.37.26.46
+```
 
-The answer section contains the resolved data. For an A record, that usually means:
+---
 
-- name
-- type
-- class
-- TTL
-- IPv4 address data
-
-## Wire-format example
-
-DNS names are encoded as length-prefixed labels:
+## Project Structure
 
 ```text
-example.com -> 07 example 03 com 00
+├── .github/
+│   └── pull_request_template.md  # Standard template for pull requests
+├── docs/
+│   ├── TECHNICAL.md              # Full architecture, protocol details & limits
+│   ├── CODE_MAP.md               # Function-by-function mapping of source code
+│   └── PROGRESS.md               # Tracking sheet for educational milestones
+├── CMakeLists.txt                # Build configuration for CMake
+├── CONTRIBUTING.md               # Code standards, git conventions, PR workflow
+├── dns_wire.c / dns_wire.h      # DNS wire packet generation and parsing
+├── main.c                        # M1 single-shot client implementation
+├── proxy.c / proxy.h             # M2 epoll UDP proxy implementation
+├── dns_test.py                   # Python validation client
+└── wsa_init_helper.c             # Winsock initialization constructor for Windows
 ```
 
-The IP is not returned as text in the packet. It is carried as raw bytes and then formatted into dotted-decimal form by the client.
+---
 
-## End-to-end flow
+## Contributing
+We welcome contributions! Please review [CONTRIBUTING.md](file:///D:/clion/dns-proxy-cache/CONTRIBUTING.md) for details regarding our branch workflow, Conventional Commit guidelines, and code standards.
 
-1. The client wants the IP for a hostname like `example.com`.
-2. The hostname is encoded into DNS wire format.
-3. A DNS request packet is built.
-4. The packet is sent to an upstream resolver over UDP.
-5. The resolver decodes the request and looks up the record.
-6. The resolver returns a structured response packet.
-7. The client parses the response and extracts the IP.
+---
 
-## Memory safety rules
+## Technical Documentation
+For a deep dive into the proxy state machine, protocol limitations, security analysis, and packet lifecycles, read [docs/TECHNICAL.md](file:///D:/clion/dns-proxy-cache/docs/TECHNICAL.md).
 
-- Every `malloc()` must have a matching `free()` on every path.
-- Never read memory after `free()`.
-- Check `realloc()` before overwriting the original pointer.
-- Update linked-list pointers before freeing a node.
-- Run leak checks before moving to the next milestone.
+---
 
-## Build
-
-### Example build commands
-
-```bash
-gcc -o dns-proxy-cache main.c dns_wire.c dns_cache.c proxy.c
-./dns-proxy-cache
-```
-
-Or with `make`:
-
-```bash
-make
-./dns-proxy-cache
-```
-
-## Debugging tools
-
-- `dig` for query testing
-- `valgrind` for leak and invalid access checks
-- `tcpdump` for packet inspection
-
-## Planned milestones
-
-1. **Milestone 1** — DNS wire engine
-2. **Milestone 2** — UDP relay loop
-3. **Milestone 3** — TTL cache
-4. **Milestone 4** — TCP fallback with buffering
-5. **Milestone 5** — polish, stats, and leak-free cleanup
-
-## Project files
-
-- `dns_wire.c` — DNS packet encoding/decoding
-- `dns_cache.c` — cache storage and eviction
-- `proxy.c` — networking and request dispatch
-- `main.c` — entry point used for testing
-
-## Notes
-
-The playbook’s core message is simple: understand the packet, own the memory, and keep the network flow separated from wire-format logic.
+## License
+This project is open-source. License unspecified. Refer to repository owner.

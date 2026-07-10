@@ -1,0 +1,139 @@
+{
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "text",
+      "text": "# 1️⃣ epoll_wait() Wakes Up\n\n* The Linux kernel triggers an event on our epoll file descriptor.\n* `epoll_wait(epoll_fd, events, MAX_EVENTS, -1)` returns `n_fds > 0`.\n* We loop through `events[i]` from `0` to `n_fds - 1`.\n\n**Key Question:** Which UDP socket just became readable?",
+      "x": 0,
+      "y": 0,
+      "width": 400,
+      "height": 240,
+      "color": "5"
+    },
+    {
+      "id": "node-2",
+      "type": "text",
+      "text": "# 2️⃣ Socket Multiplexing Check\n\nHow do we distinguish client queries from upstream replies?\n\n```c\nif (events[i].data.fd == proxy_fd) {\n    // 🟢 CASE A: Client Query on Port 5353\n} else if (events[i].data.fd == dns_server_fd) {\n    // 🔵 CASE B: Upstream Reply from 8.8.8.8\n}\n```\n\n* **`proxy_fd`**: UDP socket bound to `127.0.0.1:5353` (Clients talk here)\n* **`dns_server_fd`**: UDP socket bound to `0.0.0.0:0` (We talk to 8.8.8.8 here)",
+      "x": 0,
+      "y": 300,
+      "width": 400,
+      "height": 280,
+      "color": "6"
+    },
+    {
+      "id": "node-3",
+      "type": "text",
+      "text": "# 3️⃣ Receive Client Query\n\nWe call `recvfrom(proxy_fd, ...)` to read the DNS packet from the client.\n\n```c\nstruct sockaddr_in client_addr;\nsocklen_t addr_len = sizeof(client_addr);\nssize_t bytes_read = recvfrom(proxy_fd, buffer, sizeof(buffer), 0,\n                              (struct sockaddr*)&client_addr, &addr_len);\n```\n\n**Critical Capture:** Notice we capture `client_addr` (Client IP + Ephemeral Port)! Without this, we can never reply to them!",
+      "x": 480,
+      "y": 0,
+      "width": 420,
+      "height": 260,
+      "color": "4"
+    },
+    {
+      "id": "node-4",
+      "type": "text",
+      "text": "# 4️⃣ ⚠️ The Stateless UDP Problem\n\n**Why can't we just forward the query immediately?**\n\n* Unlike TCP, UDP has **no connection state** in the OS kernel.\n* When we forward the packet to Google (`8.8.8.8`), we send it from our `dns_server_fd`.\n* When Google replies later, the packet arrives at `dns_server_fd` with Google's source IP and our port.\n* **The kernel has NO IDEA which original client asked for this query!**\n* If 100 clients ask for `google.com` simultaneously, how do we route Google's reply back to the correct client?\n\n👉 **Solution:** We MUST save Application-Layer State before sending upstream!",
+      "x": 480,
+      "y": 300,
+      "width": 420,
+      "height": 300,
+      "color": "1"
+    },
+    {
+      "id": "node-5",
+      "type": "text",
+      "text": "# 5️⃣ Allocate `request_node` State\n\nBefore calling `sendto()` upstream, we malloc and populate a `request_node` struct and insert it into our linked list:\n\n```c\nstruct request_node *req = malloc(sizeof(struct request_node));\n\n// 1. Extract DNS Transaction ID (First 2 bytes of payload)\nreq->tx_id = ntohs(*(uint16_t*)buffer);\n\n// 2. Save Client Socket Address (IP + Ephemeral Port)\nreq->client_addr = client_addr;\n\n// 3. Save Timestamp / State (for timeouts/cleanup)\nreq->timestamp = time(NULL);\n\n// 4. Push to Linked List\nreq->next = request_list_head;\nrequest_list_head = req;\n```",
+      "x": 980,
+      "y": 0,
+      "width": 440,
+      "height": 320,
+      "color": "3"
+    },
+    {
+      "id": "node-6",
+      "type": "text",
+      "text": "# 6️⃣ Forward Query Upstream\n\nNow that our state mapping is safely stored in memory, we forward the exact datagram to Google Public DNS:\n\n```c\nssize_t sent = sendto(dns_server_fd, buffer, bytes_read, 0,\n                      (struct sockaddr*)&dns_server_addr, sizeof(dns_server_addr));\n```\n\n* **Packet leaves:** `Our IP : Random Port` ➡️ `8.8.8.8 : 53`\n* **State saved in memory:** `tx_id (e.g. 0xA1B2) ➡️ Client IP : Client Port`\n* **Next Step:** We return to `epoll_wait()` and sleep until Google replies!",
+      "x": 980,
+      "y": 360,
+      "width": 440,
+      "height": 240,
+      "color": "4"
+    },
+    {
+      "id": "node-7",
+      "type": "text",
+      "text": "# 7️⃣ Google Replies & State Resolution (The Return Path)\n\n1. **`epoll_wait()` triggers** on `dns_server_fd` (Case B in Node 2).\n2. **Read reply:** `recvfrom(dns_server_fd, response_buf, ...)` from `8.8.8.8`.\n3. **Extract ID:** Read the 16-bit DNS Transaction ID from the response header (`ntohs(*(uint16_t*)response_buf)`).\n4. **Lookup State:** Walk our `request_node` linked list to find the node where `node->tx_id == reply_id`.\n5. **Route Reply:** Call `sendto(proxy_fd, response_buf, ..., (struct sockaddr*)&node->client_addr, ...)` to send the DNS answer back to the exact client who asked!\n6. **Memory Cleanup:** `free(node)` and remove from linked list to prevent memory leaks!\n\n```c\n// The FAANG Interview Insight:\n// Why is this O(N) lookup dangerous at scale? Because if 10,000 queries are pending,\n// walking a linked list per reply causes CPU starvation! (Use a Hash Table in M3!)\n```",
+      "x": 480,
+      "y": 660,
+      "width": 940,
+      "height": 300,
+      "color": "5"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "fromNode": "node-1",
+      "fromSide": "bottom",
+      "toNode": "node-2",
+      "toSide": "top",
+      "label": "Inspect event fd",
+      "color": "5"
+    },
+    {
+      "id": "edge-2",
+      "fromNode": "node-2",
+      "fromSide": "right",
+      "toNode": "node-3",
+      "toSide": "left",
+      "label": "fd == proxy_fd (Client Query)",
+      "color": "4"
+    },
+    {
+      "id": "edge-3",
+      "fromNode": "node-3",
+      "fromSide": "bottom",
+      "toNode": "node-4",
+      "toSide": "top",
+      "label": "Why can't we send yet?",
+      "color": "1"
+    },
+    {
+      "id": "edge-4",
+      "fromNode": "node-4",
+      "fromSide": "right",
+      "toNode": "node-5",
+      "toSide": "left",
+      "label": "Mandatory State Allocation",
+      "color": "3"
+    },
+    {
+      "id": "edge-5",
+      "fromNode": "node-5",
+      "fromSide": "bottom",
+      "toNode": "node-6",
+      "toSide": "top",
+      "label": "State saved! Now forward",
+      "color": "4"
+    },
+    {
+      "id": "edge-6",
+      "fromNode": "node-6",
+      "fromSide": "bottom",
+      "toNode": "node-7",
+      "toSide": "right",
+      "label": "Wait for Google reply",
+      "color": "5"
+    },
+    {
+      "id": "edge-7",
+      "fromNode": "node-2",
+      "fromSide": "bottom",
+      "toNode": "node-7",
+      "toSide": "left",
+      "label": "fd == dns_server_fd (Google Reply)",
+      "color": "5"
+    }
+  ]
+}

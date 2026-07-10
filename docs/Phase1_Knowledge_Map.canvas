@@ -1,0 +1,476 @@
+{
+  "nodes": [
+    {
+      "id": "grp_l0_identity",
+      "type": "group",
+      "x": -80,
+      "y": -80,
+      "width": 1560,
+      "height": 420,
+      "label": "Level 0: Project Identity & Problem Statement",
+      "color": "5"
+    },
+    {
+      "id": "grp_l1_arch",
+      "type": "group",
+      "x": -80,
+      "y": 420,
+      "width": 1560,
+      "height": 420,
+      "label": "Level 1: Architecture & Component Roles",
+      "color": "6"
+    },
+    {
+      "id": "grp_l2_concepts",
+      "type": "group",
+      "x": -80,
+      "y": 920,
+      "width": 1560,
+      "height": 620,
+      "label": "Level 2: Core Concepts & Mechanisms",
+      "color": "4"
+    },
+    {
+      "id": "grp_l3_flow",
+      "type": "group",
+      "x": -80,
+      "y": 1620,
+      "width": 1560,
+      "height": 420,
+      "label": "Level 3: Data Flow & State Management",
+      "color": "3"
+    },
+    {
+      "id": "grp_l4_edge",
+      "type": "group",
+      "x": -80,
+      "y": 2120,
+      "width": 1560,
+      "height": 620,
+      "label": "Level 4: Edge Cases & Failure Modes",
+      "color": "1"
+    },
+    {
+      "id": "grp_l5_faang",
+      "type": "group",
+      "x": -80,
+      "y": 2820,
+      "width": 1560,
+      "height": 420,
+      "label": "Level 5: System Design & FAANG Deep-Dives",
+      "color": "2"
+    },
+    {
+      "id": "q0_1_what_is",
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 320,
+      "height": 140,
+      "text": "# Q0.1: What is this project?\n\nCan you describe it in one precise sentence without saying \"it's a DNS thing\"?\n\nRating: [ ] Solid [ ] Shaky [ ] Gap",
+      "color": "5"
+    },
+    {
+      "id": "q0_2_problem",
+      "type": "text",
+      "x": 380,
+      "y": 0,
+      "width": 340,
+      "height": 140,
+      "text": "# Q0.2: What problem does it solve?\n\n3 real reasons DNS proxies exist:\n- Caching\n- Filtering/Policy\n- Logging/Monitoring\n\nWhich does OUR proxy do? (Trick question)",
+      "color": "5"
+    },
+    {
+      "id": "q0_3_milestones",
+      "type": "text",
+      "x": 780,
+      "y": 0,
+      "width": 340,
+      "height": 140,
+      "text": "# Q0.3: What are the milestones?\n\nWhat does each milestone PROVE you understand?\n- M1 = ?\n- M2 = ?\n- M3 = ?\n\nWhat is the progression pattern?",
+      "color": "5"
+    },
+    {
+      "id": "q0_4_why_c",
+      "type": "text",
+      "x": 1180,
+      "y": 0,
+      "width": 260,
+      "height": 140,
+      "text": "# Q0.4: Why C?\n\nWhy not Python, Go, or Rust?\n\nWhat does C force you to manage that other languages hide?",
+      "color": "5"
+    },
+    {
+      "id": "q0_tip",
+      "type": "text",
+      "x": 0,
+      "y": 180,
+      "width": 1440,
+      "height": 100,
+      "text": "**FAANG Interview Tip for Level 0:** Your answer to \"what is this project\" IS your opening pitch. Practice: \"It's a userspace UDP proxy that sits between local clients and an upstream DNS resolver. Clients send standard DNS queries to localhost:5353, the proxy forwards them to 8.8.8.8:53, receives responses asynchronously, and routes each response back to the correct originating client.\"",
+      "color": "#dbe4ff"
+    },
+    {
+      "id": "q1_1_execs",
+      "type": "text",
+      "x": 0,
+      "y": 500,
+      "width": 340,
+      "height": 150,
+      "text": "# Q1.1: Two Executables\n\nWhat are the two build targets?\nWhat does each one link against?\nWhich one calls dns_wire.c functions at runtime? Why doesn't the other?",
+      "color": "6"
+    },
+    {
+      "id": "q1_2_wire",
+      "type": "text",
+      "x": 400,
+      "y": 500,
+      "width": 340,
+      "height": 150,
+      "text": "# Q1.2: dns_wire.c\n\nName all 4 functions.\nWhich milestone uses them?\nIf M2 doesn't parse DNS, how does it know the transaction ID?",
+      "color": "6"
+    },
+    {
+      "id": "q1_3_oneliner",
+      "type": "text",
+      "x": 800,
+      "y": 500,
+      "width": 340,
+      "height": 150,
+      "text": "# Q1.3: proxy.c in one sentence\n\nDescribe the entire architecture of proxy.c in a single precise sentence.\n\nEvery technical word must carry weight. If you can't explain any one word, that's a Known Unknown.",
+      "color": "6"
+    },
+    {
+      "id": "q1_4_helpers",
+      "type": "text",
+      "x": 1200,
+      "y": 500,
+      "width": 240,
+      "height": 150,
+      "text": "# Q1.4: Helper Files\n\nWhat is patch.h?\nWhat is wsa_init_helper.c?\nAre they used in production?\nWhat is __attribute__((constructor))?",
+      "color": "6"
+    },
+    {
+      "id": "q1_tip",
+      "type": "text",
+      "x": 0,
+      "y": 690,
+      "width": 1440,
+      "height": 80,
+      "text": "**Key Insight:** M2 never calls dns_wire.c at runtime. It forwards RAW bytes. It reads bytes 0-1 directly for the transaction ID via ntohs(*(uint16_t*)buffer) without any parsing logic. The proxy is TRANSPARENT.",
+      "color": "#e5dbff"
+    },
+    {
+      "id": "q2_1_udp",
+      "type": "text",
+      "x": 0,
+      "y": 1000,
+      "width": 320,
+      "height": 160,
+      "text": "# Q2.1: UDP vs TCP\n\nList 4 differences in a table.\nWhich property explains WHY our proxy needs request_node?\nWhat does \"connectionless\" actually mean at the kernel level?",
+      "color": "4"
+    },
+    {
+      "id": "q2_2_epoll",
+      "type": "text",
+      "x": 380,
+      "y": 1000,
+      "width": 340,
+      "height": 160,
+      "text": "# Q2.2: What is epoll?\n\nExplain the 3 syscalls:\n- epoll_create1()\n- epoll_ctl()\n- epoll_wait()\n\nWhy is epoll better than select() for M2?",
+      "color": "4"
+    },
+    {
+      "id": "q2_3_nonblock",
+      "type": "text",
+      "x": 780,
+      "y": 1000,
+      "width": 340,
+      "height": 160,
+      "text": "# Q2.3: Non-blocking I/O\n\nWhat does O_NONBLOCK do to recvfrom()?\nWhat is EAGAIN and why does the code check for it?\nWhat is the alternative to non-blocking? Why is it worse?",
+      "color": "4"
+    },
+    {
+      "id": "q2_4_endian",
+      "type": "text",
+      "x": 1180,
+      "y": 1000,
+      "width": 260,
+      "height": 160,
+      "text": "# Q2.4: Byte Order\n\nWhat is big-endian vs little-endian?\nWhat does ntohs() do?\nWhat happens if you skip this conversion on x86?",
+      "color": "4"
+    },
+    {
+      "id": "q2_5_recvfrom",
+      "type": "text",
+      "x": 0,
+      "y": 1230,
+      "width": 320,
+      "height": 160,
+      "text": "# Q2.5: recvfrom vs recv\n\nWhy recvfrom() and not recv()?\nWhat extra information does recvfrom() provide?\nIn TCP, why is recv() sufficient but in UDP it's not?",
+      "color": "4"
+    },
+    {
+      "id": "q2_6_sockaddr",
+      "type": "text",
+      "x": 380,
+      "y": 1230,
+      "width": 340,
+      "height": 160,
+      "text": "# Q2.6: struct sockaddr_in\n\nWhat are the 4 fields?\nWhich fields are in network byte order?\nWhat is an ephemeral port and who assigns it?\nWhy is sin_zero there?",
+      "color": "4"
+    },
+    {
+      "id": "q2_tip",
+      "type": "text",
+      "x": 780,
+      "y": 1230,
+      "width": 660,
+      "height": 160,
+      "text": "**The Core Insight of Level 2:**\n\nTCP gives you ONE file descriptor PER CLIENT. The kernel routes replies for you.\nUDP gives you ONE SHARED file descriptor for ALL clients. YOU must route replies yourself.\n\nThis single fact explains the entire request_node architecture.\nIf you deeply understand this, you understand M2.",
+      "color": "#d3f9d8"
+    },
+    {
+      "id": "q3_1_lifecycle",
+      "type": "text",
+      "x": 0,
+      "y": 1700,
+      "width": 340,
+      "height": 160,
+      "text": "# Q3.1: Packet Lifecycle\n\nTrace one DNS query through proxy.c:\n11 steps from epoll_wait to free(node).\n\nCan you name every system call in order?",
+      "color": "3"
+    },
+    {
+      "id": "q3_2_reqnode",
+      "type": "text",
+      "x": 400,
+      "y": 1700,
+      "width": 320,
+      "height": 160,
+      "text": "# Q3.2: request_node struct\n\nName all 6 fields and explain each.\nWhat problem does this struct solve?\nWhy is it an \"application-layer state machine\"?",
+      "color": "3"
+    },
+    {
+      "id": "q3_3_double_malloc",
+      "type": "text",
+      "x": 780,
+      "y": 1700,
+      "width": 340,
+      "height": 160,
+      "text": "# Q3.3: Why double malloc?\n\nadd() calls malloc twice.\nWhy not embed a fixed buffer in the struct?\nWhy not point to the caller's stack buffer?\nWhat must delete() do as a consequence?",
+      "color": "3"
+    },
+    {
+      "id": "q3_4_find",
+      "type": "text",
+      "x": 1180,
+      "y": 1700,
+      "width": 260,
+      "height": 160,
+      "text": "# Q3.4: find() complexity\n\nWhat is the time complexity?\nBest case? Worst case?\nWhat data structure would give O(1)?",
+      "color": "3"
+    },
+    {
+      "id": "q4_1_collision",
+      "type": "text",
+      "x": 0,
+      "y": 2200,
+      "width": 320,
+      "height": 160,
+      "text": "# Q4.1: ID Collision\n\nTwo clients send queries with the same 16-bit transaction ID.\nWho gets the response?\nWhat happens to the other node?\nAt what load does collision hit 50%?",
+      "color": "1"
+    },
+    {
+      "id": "q4_2_no_reply",
+      "type": "text",
+      "x": 380,
+      "y": 2200,
+      "width": 320,
+      "height": 160,
+      "text": "# Q4.2: No Reply (OOM Leak)\n\nGoogle never responds.\nWhat happens to the request_node?\nIs there ANY cleanup mechanism?\nWhat happens under sustained packet loss?",
+      "color": "1"
+    },
+    {
+      "id": "q4_3_sendto_fail",
+      "type": "text",
+      "x": 760,
+      "y": 2200,
+      "width": 340,
+      "height": 160,
+      "text": "# Q4.3: sendto() Fails\n\nWhat is the return value of sendto()?\nDoes our code check it?\nThe node was already added to the list. What happens to it?\nDesign the fix.",
+      "color": "1"
+    },
+    {
+      "id": "q4_4_malloc_fail",
+      "type": "text",
+      "x": 1160,
+      "y": 2200,
+      "width": 280,
+      "height": 160,
+      "text": "# Q4.4: malloc Fails\n\nadd() returns -1.\nDoes the event loop check this?\nThe query is STILL forwarded.\nWhat happens when Google replies?",
+      "color": "1"
+    },
+    {
+      "id": "q4_5_buffer",
+      "type": "text",
+      "x": 0,
+      "y": 2420,
+      "width": 320,
+      "height": 160,
+      "text": "# Q4.5: Buffer Size\n\nIs 1024 bytes enough?\nWhat does RFC 1035 say?\nWhat does RFC 6891 (EDNS0) say?\nWhat does recvfrom() do with oversized data?",
+      "color": "1"
+    },
+    {
+      "id": "q4_tip",
+      "type": "text",
+      "x": 380,
+      "y": 2420,
+      "width": 1060,
+      "height": 160,
+      "text": "**The Pattern in Level 4:**\n\nEvery failure mode follows the same root cause: the code OPTIMIZES FOR THE HAPPY PATH.\n\n- Errors from sendto(), add(), recvfrom() are IGNORED.\n- There is no timeout, no cleanup, no eviction.\n- The linked list grows without bound.\n\nA FAANG senior recognizes this pattern instantly: \"The system has no defense against time, load, or failure.\"\nThat is the single sentence that summarizes every seed in REVIEW-SEEDS.md.",
+      "color": "#ffc9c9"
+    },
+    {
+      "id": "q5_1_scale",
+      "type": "text",
+      "x": 0,
+      "y": 2900,
+      "width": 340,
+      "height": 160,
+      "text": "# Q5.1: At 10K QPS\n\nWhere does the proxy break first?\nHow many concurrent pending requests at 50ms avg RTT?\nHow many node comparisons per second?\nDesign the fix stack.",
+      "color": "2"
+    },
+    {
+      "id": "q5_2_caching",
+      "type": "text",
+      "x": 400,
+      "y": 2900,
+      "width": 340,
+      "height": 160,
+      "text": "# Q5.2: M3 Cache Design\n\nHow would you add caching?\nWhat is the cache key?\nHow do you handle TTL expiration?\nWhat is negative caching?\nWhat is cache poisoning?",
+      "color": "2"
+    },
+    {
+      "id": "q5_3_wire",
+      "type": "text",
+      "x": 800,
+      "y": 2900,
+      "width": 340,
+      "height": 160,
+      "text": "# Q5.3: DNS Wire Format\n\nDraw the byte layout of a DNS query header (12 bytes).\nWhat is a length-prefixed label?\nWhat is DNS name compression?\nWhat does our parser NOT handle?",
+      "color": "2"
+    },
+    {
+      "id": "q5_4_security",
+      "type": "text",
+      "x": 1200,
+      "y": 2900,
+      "width": 240,
+      "height": 160,
+      "text": "# Q5.4: Why validate sender?\n\nWhat is DNS cache poisoning?\nWhat is the Kaminsky attack?\nWhy are 16-bit IDs dangerous?\nWhat modern defenses exist?",
+      "color": "2"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_l0_l1_flow",
+      "fromNode": "q0_tip",
+      "fromSide": "bottom",
+      "toNode": "q1_1_execs",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Level Up: Identity to Architecture",
+      "color": "6"
+    },
+    {
+      "id": "e_l1_l2_flow",
+      "fromNode": "q1_tip",
+      "fromSide": "bottom",
+      "toNode": "q2_1_udp",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Level Up: Architecture to Mechanisms",
+      "color": "4"
+    },
+    {
+      "id": "e_l2_l3_flow",
+      "fromNode": "q2_tip",
+      "fromSide": "bottom",
+      "toNode": "q3_1_lifecycle",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Level Up: Concepts to Data Flow",
+      "color": "3"
+    },
+    {
+      "id": "e_l3_l4_flow",
+      "fromNode": "q3_4_find",
+      "fromSide": "bottom",
+      "toNode": "q4_1_collision",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Level Up: Flow to Failure Modes",
+      "color": "1"
+    },
+    {
+      "id": "e_l4_l5_flow",
+      "fromNode": "q4_tip",
+      "fromSide": "bottom",
+      "toNode": "q5_1_scale",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Level Up: Failures to System Design",
+      "color": "2"
+    },
+    {
+      "id": "e_udp_reqnode",
+      "fromNode": "q2_1_udp",
+      "fromSide": "bottom",
+      "toNode": "q3_2_reqnode",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "UDP statelessness forces request_node",
+      "color": "3"
+    },
+    {
+      "id": "e_find_collision",
+      "fromNode": "q3_4_find",
+      "fromSide": "right",
+      "toNode": "q4_1_collision",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "find() returns first match: collision bug",
+      "color": "1"
+    },
+    {
+      "id": "e_collision_scale",
+      "fromNode": "q4_1_collision",
+      "fromSide": "bottom",
+      "toNode": "q5_1_scale",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Birthday problem at scale",
+      "color": "2"
+    },
+    {
+      "id": "e_noreply_oom",
+      "fromNode": "q4_2_no_reply",
+      "fromSide": "bottom",
+      "toNode": "q5_1_scale",
+      "toSide": "top",
+      "toEnd": "arrow",
+      "label": "Unbounded list growth under load",
+      "color": "1"
+    },
+    {
+      "id": "e_wire_cache",
+      "fromNode": "q5_3_wire",
+      "fromSide": "left",
+      "toNode": "q5_2_caching",
+      "toSide": "right",
+      "toEnd": "arrow",
+      "label": "Caching needs DNS parsing (TTL extraction)",
+      "color": "2"
+    }
+  ]
+}
